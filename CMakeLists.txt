@@ -1,8 +1,12 @@
 cmake_minimum_required(VERSION 3.15)
 project(pricing_core LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# Default to an optimised build if the user didn't pick one.
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
 
 # Let pybind11 help find the right Python
 set(pybind11_DIR "/opt/miniconda3/lib/python3.13/site-packages/pybind11/share/cmake/pybind11")
