@@ -6,33 +6,10 @@
 #include <random>       // std::mt19937_64, std::normal_distribution (MonteCarloModel)
 #include <stdexcept>    // std::invalid_argument, std::logic_error
 #include <string>       // std::to_string (used in error messages)
+#include <math_utils.hpp>
 
-// ---------------------------------------------------------------------------
-// norm_cdf  (file-local helper)
-// ---------------------------------------------------------------------------
-// Cumulative distribution function of the standard normal N(0,1).
-// Used by both BlackScholesModel::price and BlackScholesModel::greeks.
-//
-// Formula: Phi(x) = 0.5 * erfc(-x / sqrt(2))
-//   erfc = complementary error function, available in <cmath>
-//   This is numerically equivalent to the integral of the Gaussian PDF
-//   from -inf to x.
-// ---------------------------------------------------------------------------
-static double norm_cdf(double x) {
-    return 0.5 * std::erfc(-x / std::sqrt(2.0));
-}
 
-// ---------------------------------------------------------------------------
-// norm_pdf  (file-local helper)
-// ---------------------------------------------------------------------------
-// Probability density function of the standard normal N(0,1).
-// Formula: phi(x) = exp(-x^2/2) / sqrt(2*pi)
-// Used by BlackScholesModel::greeks for gamma, vega, theta.
-// ---------------------------------------------------------------------------
-static double norm_pdf(double x) {
-    return std::exp(-0.5 * x * x) / std::sqrt(2.0 * M_PI);
-}
-
+using namespace qa;
 // ===========================================================================
 // validate_option_spec
 // ===========================================================================
@@ -195,10 +172,10 @@ double BlackScholesModel::price(const OptionSpec& opt) const {
 
     if (opt.is_call) {
         // Call: probability-weighted present value of receiving S minus paying K
-        return S * norm_cdf(d1) - K * std::exp(-r * T) * norm_cdf(d2);
+        return S * qa::math::norm_cdf(d1) - K * std::exp(-r * T) * qa::math::norm_cdf(d2);
     } else {
         // Put: mirror image using put-call symmetry N(-d) = 1 - N(d)
-        return K * std::exp(-r * T) * norm_cdf(-d2) - S * norm_cdf(-d1);
+        return K * std::exp(-r * T) * qa::math::norm_cdf(-d2) - S * qa::math::norm_cdf(-d1);
     }
 }
 
@@ -238,7 +215,7 @@ GreeksResult BlackScholesModel::greeks(const OptionSpec& opt) const {
     double df = std::exp(-r * T);  // = e^{-rT}
 
     // Normal PDF at d1 — appears in gamma, vega, and theta.
-    double phi_d1 = norm_pdf(d1);
+    double phi_d1 = qa::math::norm_pdf(d1);
 
     GreeksResult g;
 
@@ -252,15 +229,15 @@ GreeksResult BlackScholesModel::greeks(const OptionSpec& opt) const {
     // Delta, Theta, Rho differ by sign between call and put.
     // ------------------------------------------------------------------
     if (opt.is_call) {
-        g.delta = norm_cdf(d1);                                            // in (0, 1)
+        g.delta = qa::math::norm_cdf(d1);                                            // in (0, 1)
         g.theta = -(S * phi_d1 * sigma) / (2.0 * sqrtT)                   // vol decay
-                  - r * K * df * norm_cdf(d2);                             // interest effect
-        g.rho   = K * T * df * norm_cdf(d2);                              // positive for calls
+                  - r * K * df * qa::math::norm_cdf(d2);                             // interest effect
+        g.rho   = K * T * df * qa::math::norm_cdf(d2);                              // positive for calls
     } else {
-        g.delta = norm_cdf(d1) - 1.0;                                     // in (-1, 0)
+        g.delta = qa::math::norm_cdf(d1) - 1.0;                                     // in (-1, 0)
         g.theta = -(S * phi_d1 * sigma) / (2.0 * sqrtT)                   // vol decay (same)
-                  + r * K * df * norm_cdf(-d2);                            // interest effect flips
-        g.rho   = -K * T * df * norm_cdf(-d2);                            // negative for puts
+                  + r * K * df * qa::math::norm_cdf(-d2);                            // interest effect flips
+        g.rho   = -K * T * df * qa::math::norm_cdf(-d2);                            // negative for puts
     }
 
     return g;
