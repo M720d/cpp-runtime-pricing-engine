@@ -2,45 +2,11 @@
 
 #include <memory>
 #include <stdexcept>  // for std::runtime_error thrown in PricingEngine
+#include "types.hpp"
 
-// ---------------------------------------------------------------------------
-// OptionSpec
-// ---------------------------------------------------------------------------
-// Plain data struct that describes a single option contract.
-// All pricing models and the engine receive this as input.
-// Adding new fields here (e.g. dividends) would propagate everywhere.
-// ---------------------------------------------------------------------------
-struct OptionSpec {
-    double spot     = 0.0;   // current underlying price  (S)
-    double strike   = 0.0;   // option strike price       (K)
-    double rate     = 0.0;   // risk-free interest rate   (r, annualised)
-    double vol      = 0.0;   // volatility (sigma, annualised)
-    double maturity = 0.0;   // time to expiry in years   (T)
-    bool   is_call  = true;  // true = call, false = put
-    bool   is_american = false; // false = European (default), true = American
-                                // American: holder may exercise at any time before T
-                                // European: holder may only exercise at T
-};
 
-// ---------------------------------------------------------------------------
-// GreeksResult
-// ---------------------------------------------------------------------------
-// Returned by any model's greeks() method.
-// Each field is a first-order sensitivity of the option price to one input:
-//   delta : dP/dS      — how much price moves per $1 move in the underlying
-//   gamma : d²P/dS²    — rate of change of delta; convexity of price vs spot
-//   vega  : dP/dsigma  — sensitivity to a 1-unit change in vol (not 1%)
-//   theta : -dP/dT     — daily time decay (sign: positive = value erodes)
-//   rho   : dP/dr      — sensitivity to a 1-unit change in interest rate
-// ---------------------------------------------------------------------------
-struct GreeksResult {
-    double delta = 0.0;
-    double gamma = 0.0;
-    double vega  = 0.0;
-    double theta = 0.0;
-    double rho   = 0.0;
-};
-
+using qa::OptionSpec;
+using qa::GreeksResult;
 // ---------------------------------------------------------------------------
 // validate_option_spec
 // ---------------------------------------------------------------------------
@@ -52,23 +18,6 @@ struct GreeksResult {
 // ---------------------------------------------------------------------------
 void validate_option_spec(const OptionSpec& opt);
 
-// ---------------------------------------------------------------------------
-// PricingModel  (Abstract Base Class)
-// ---------------------------------------------------------------------------
-// Defines the interface every pricing algorithm must satisfy.
-//
-// Subclass hierarchy:
-//   PricingModel
-//     ├── BlackScholesModel   — closed-form analytic solution
-//     ├── BinomialModel       — numerical lattice (supports American)
-//     └── MonteCarloModel     — stochastic simulation (European only)
-//
-// greeks() has a DEFAULT implementation in the base class that uses
-// finite differences (bumping inputs and re-pricing).  That means any new
-// subclass you add automatically gets working Greeks without extra code.
-// BlackScholesModel overrides greeks() with the exact analytic formulas
-// because they are both faster and more accurate.
-// ---------------------------------------------------------------------------
 class PricingModel {
 public:
     // Must be implemented by every concrete model.

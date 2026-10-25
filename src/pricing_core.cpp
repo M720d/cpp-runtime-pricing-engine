@@ -9,7 +9,6 @@
 #include <math_utils.hpp>
 
 
-using namespace qa;
 // ===========================================================================
 // validate_option_spec
 // ===========================================================================
@@ -24,21 +23,11 @@ using namespace qa;
 //   rate     >= -1 (allow mildly negative rates; reject implausibly extreme values)
 // ===========================================================================
 void validate_option_spec(const OptionSpec& opt) {
-    if (opt.spot <= 0.0)
-        throw std::invalid_argument(
-            "spot must be > 0, got: " + std::to_string(opt.spot));
-    if (opt.strike <= 0.0)
-        throw std::invalid_argument(
-            "strike must be > 0, got: " + std::to_string(opt.strike));
-    if (opt.vol <= 0.0)
-        throw std::invalid_argument(
-            "vol must be > 0, got: " + std::to_string(opt.vol));
-    if (opt.maturity <= 0.0)
-        throw std::invalid_argument(
-            "maturity must be > 0, got: " + std::to_string(opt.maturity));
-    if (opt.rate < -1.0)
-        throw std::invalid_argument(
-            "rate is implausibly negative, got: " + std::to_string(opt.rate));
+    const qa::Status checkStatus = check(opt);
+
+    if(checkStatus!=qa::Status::ok){
+        throw std::invalid_argument(qa::to_string(checkStatus));
+    }
 }
 
 // ===========================================================================
