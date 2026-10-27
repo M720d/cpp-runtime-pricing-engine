@@ -6,7 +6,9 @@
 #include <random>       // std::mt19937_64, std::normal_distribution (MonteCarloModel)
 #include <stdexcept>    // std::invalid_argument, std::logic_error
 #include <string>       // std::to_string (used in error messages)
-#include <math_utils.hpp>
+#include "math_utils.hpp"
+#include "black_scholes.hpp"
+#include "types.hpp" 
 
 
 // ===========================================================================
@@ -30,26 +32,7 @@ void validate_option_spec(const OptionSpec& opt) {
     }
 }
 
-// ===========================================================================
-// PricingModel::greeks  (base-class default — finite differences)
-// ===========================================================================
-// This is the FALLBACK Greeks implementation that every subclass inherits
-// automatically.  It estimates each Greek by bumping one input, re-pricing
-// twice (up and down), and dividing by the bump size — the standard
-// central-difference approximation.
-//
-// Why central differences?  They are O(h²) accurate, meaning halving the
-// bump size reduces error by 4x, vs only 2x for forward differences.
-//
-// Bump sizes are chosen as a fraction (1e-4) of the current parameter value:
-//   - Relative bumps (1e-4 * S, 1e-4 * vol, etc.) scale automatically with
-//     the option's parameters so we don't need to tune per-contract.
-//   - Rate bump is absolute (1e-4) since rate near 0 would give a zero bump.
-//
-// IMPORTANT: this method calls price() on *this*, so it uses whatever
-// concrete model (BS, Binomial, MC) is the actual subclass — polymorphism
-// in action.
-// ===========================================================================
+
 GreeksResult PricingModel::greeks(const OptionSpec& opt) const {
     GreeksResult g;
 
@@ -124,113 +107,19 @@ GreeksResult PricingModel::greeks(const OptionSpec& opt) const {
     return g;
 }
 
-// ===========================================================================
-// BlackScholesModel::price
-// ===========================================================================
-// The Black-Scholes-Merton closed-form formula for European options.
-//
-// Key intermediate quantities:
-//   d1 = [ln(S/K) + (r + sigma²/2)*T] / (sigma*sqrt(T))
-//   d2 = d1 - sigma*sqrt(T)
-//
-// Call price:  S * N(d1) - K*exp(-rT) * N(d2)
-// Put price:   K*exp(-rT) * N(-d2) - S * N(-d1)
-//   where N() = norm_cdf = cumulative standard normal CDF.
-// ===========================================================================
-double BlackScholesModel::price(const OptionSpec& opt) const {
-    double S     = opt.spot;
-    double K     = opt.strike;
-    double r     = opt.rate;
-    double sigma = opt.vol;
-    double T     = opt.maturity;
 
-    // Edge case: handle degenerate inputs gracefully (T=0 or sigma=0).
-    // In these cases the option is worth its discounted intrinsic value.
-    if (T <= 0.0 || sigma <= 0.0) {
-        double intrinsic = opt.is_call
-            ? std::max(S - K, 0.0)
-            : std::max(K - S, 0.0);
-        return intrinsic * std::exp(-r * T);
-    }
-
-    double sqrtT = std::sqrt(T);
-
-    // d1 and d2 are the standardised log-moneyness adjusted for drift and vol.
-    double d1 = (std::log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * sqrtT);
-    double d2 = d1 - sigma * sqrtT;  // d2 = d1 minus one vol-adjusted std dev
-
-    if (opt.is_call) {
-        // Call: probability-weighted present value of receiving S minus paying K
-        return S * qa::math::norm_cdf(d1) - K * std::exp(-r * T) * qa::math::norm_cdf(d2);
-    } else {
-        // Put: mirror image using put-call symmetry N(-d) = 1 - N(d)
-        return K * std::exp(-r * T) * qa::math::norm_cdf(-d2) - S * qa::math::norm_cdf(-d1);
-    }
+double BlackScholesModel::price( const OptionSpec &o)const {
+    validate_option_spec(o);
+    return qa::bs::price(o);
 }
 
-// ===========================================================================
-// BlackScholesModel::greeks  (analytic override)
-// ===========================================================================
-// Exact closed-form partial derivatives of the BS price formula.
-// Much faster and more precise than the finite-difference fallback.
-//
-// All formulas share the same d1/d2 intermediates from price().
-//
-// Symmetric Greeks (same for calls and puts):
-//   gamma = phi(d1) / (S * sigma * sqrt(T))
-//   vega  = S * sqrt(T) * phi(d1)
-//   where phi() = norm_pdf = standard normal probability density.
-//
-// Asymmetric Greeks (sign differs between calls and puts):
-//   delta_call =  N(d1),    delta_put = N(d1) - 1  [always in (0,1) / (-1,0)]
-//   theta_call = -(S*phi(d1)*sigma)/(2*sqrt(T)) - r*K*exp(-rT)*N(d2)
-//   theta_put  = -(S*phi(d1)*sigma)/(2*sqrt(T)) + r*K*exp(-rT)*N(-d2)
-//   rho_call   =  K*T*exp(-rT)*N(d2)
-//   rho_put    = -K*T*exp(-rT)*N(-d2)
-// ===========================================================================
-GreeksResult BlackScholesModel::greeks(const OptionSpec& opt) const {
-    double S     = opt.spot;
-    double K     = opt.strike;
-    double r     = opt.rate;
-    double sigma = opt.vol;
-    double T     = opt.maturity;
-    double sqrtT = std::sqrt(T);
-
-    // Recompute d1/d2 (same as in price()).
-    double d1 = (std::log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * sqrtT);
-    double d2 = d1 - sigma * sqrtT;
-
-    // Discount factor for the strike leg.
-    double df = std::exp(-r * T);  // = e^{-rT}
-
-    // Normal PDF at d1 — appears in gamma, vega, and theta.
-    double phi_d1 = qa::math::norm_pdf(d1);
-
-    GreeksResult g;
-
-    // ------------------------------------------------------------------
-    // Gamma and Vega are the same for calls and puts (put-call parity).
-    // ------------------------------------------------------------------
-    g.gamma = phi_d1 / (S * sigma * sqrtT);
-    g.vega  = S * sqrtT * phi_d1;
-
-    // ------------------------------------------------------------------
-    // Delta, Theta, Rho differ by sign between call and put.
-    // ------------------------------------------------------------------
-    if (opt.is_call) {
-        g.delta = qa::math::norm_cdf(d1);                                            // in (0, 1)
-        g.theta = -(S * phi_d1 * sigma) / (2.0 * sqrtT)                   // vol decay
-                  - r * K * df * qa::math::norm_cdf(d2);                             // interest effect
-        g.rho   = K * T * df * qa::math::norm_cdf(d2);                              // positive for calls
-    } else {
-        g.delta = qa::math::norm_cdf(d1) - 1.0;                                     // in (-1, 0)
-        g.theta = -(S * phi_d1 * sigma) / (2.0 * sqrtT)                   // vol decay (same)
-                  + r * K * df * qa::math::norm_cdf(-d2);                            // interest effect flips
-        g.rho   = -K * T * df * qa::math::norm_cdf(-d2);                            // negative for puts
-    }
-
-    return g;
+GreeksResult BlackScholesModel::greeks(const OptionSpec&o)const{
+    validate_option_spec(o);
+    return qa::bs::greeks(o);
 }
+
+
+
 
 // ===========================================================================
 // BinomialModel::BinomialModel

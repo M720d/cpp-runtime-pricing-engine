@@ -20,13 +20,14 @@ namespace qa::bs
     {
         const double sqrt_t = std::sqrt(o.maturity);
         const double vol_sqrt_t = o.vol * sqrt_t;
-        const double d1 = (std::log(o.spot / o.strike) + (o.rate + 0.5 * o.vol *o.vol  * o.maturity)) / vol_sqrt_t;
+        const double d1 = (std::log(o.spot / o.strike) + (o.rate + 0.5 * o.vol * o.vol) * o.maturity) / vol_sqrt_t;
+
         return {d1, d1 - (vol_sqrt_t), sqrt_t};
     }
 
     [[nodiscard]] inline double price(const OptionSpec &o) noexcept
     {
-         Terms t = terms(o);
+        Terms t = terms(o);
         // discounted strike
         const double disc_strike = o.strike * std::exp(-o.rate * o.maturity);
         return o.is_call

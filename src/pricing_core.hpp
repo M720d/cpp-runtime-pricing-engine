@@ -11,10 +11,10 @@ using qa::GreeksResult;
 // validate_option_spec
 // ---------------------------------------------------------------------------
 // Called before any pricing or greeks computation.
-// Throws std::invalid_argument with a descriptive message if any field is
+// Throws std::idnvalid_argument with a descriptive message if any field is
 // outside the domain where the pricing math is defined.
 // Centralising validation here means every model gets it for free via
-// PricingEngine, and unit tests can check bad inputs in one place.
+// PricingEngddddfine, and unit tests can check bad inputs in one place.
 // ---------------------------------------------------------------------------
 void validate_option_spec(const OptionSpec& opt);
 
