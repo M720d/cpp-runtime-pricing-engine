@@ -9,6 +9,7 @@
 #include "math_utils.hpp"
 #include "black_scholes.hpp"
 #include "types.hpp" 
+#include "binomial.hpp" 
 
 
 // ===========================================================================
@@ -152,57 +153,7 @@ BinomialModel::BinomialModel(int steps)
 // The final option_values[0] after rolling all the way back is the price.
 // ===========================================================================
 double BinomialModel::price(const OptionSpec& opt) const {
-    int    N     = std::max(1, steps_);
-    double S0    = opt.spot;
-    double K     = opt.strike;
-    double r     = opt.rate;
-    double sigma = opt.vol;
-    double T     = opt.maturity;
-
-    double dt   = T / N;
-    double u    = std::exp(sigma * std::sqrt(dt));  // up factor
-    double d    = 1.0 / u;                          // down factor (recombining)
-    double disc = std::exp(-r * dt);                // one-step discount factor
-    double p    = (std::exp(r * dt) - d) / (u - d); // risk-neutral up probability
-
-    // --- Step 1: Fill terminal payoffs ---
-    // option_values[i] = payoff if there were i up-moves and (N-i) down-moves
-    std::vector<double> option_values(N + 1);
-    for (int i = 0; i <= N; ++i) {
-        double ST = S0 * std::pow(u, i) * std::pow(d, N - i); // terminal spot
-        option_values[i] = opt.is_call
-            ? std::max(ST - K, 0.0)   // call payoff: max(S-K, 0)
-            : std::max(K - ST, 0.0);  // put  payoff: max(K-S, 0)
-    }
-
-    // --- Step 2: Roll backwards through the tree ---
-    for (int step = N - 1; step >= 0; --step) {
-        for (int i = 0; i <= step; ++i) {
-            // Risk-neutral expected value discounted one step
-            double continuation = disc * (p * option_values[i + 1]
-                                        + (1.0 - p) * option_values[i]);
-
-            if (opt.is_american) {
-                // For American options: the holder can exercise NOW (intrinsic)
-                // or wait (continuation).  We take the maximum — this is the
-                // early-exercise feature that makes Americans worth >= Europeans.
-                //
-                // Spot at this node: S0 * u^(up_moves) * d^(down_moves)
-                // In backward induction at step `step`, node `i` has i up-moves.
-                double S_node  = S0 * std::pow(u, i) * std::pow(d, step - i);
-                double exercise = opt.is_call
-                    ? std::max(S_node - K, 0.0)
-                    : std::max(K - S_node, 0.0);
-                option_values[i] = std::max(continuation, exercise);
-            } else {
-                // European: no early exercise — just take the discounted expectation.
-                option_values[i] = continuation;
-            }
-        }
-    }
-
-    // After rolling all the way back, index 0 is the root of the tree.
-    return option_values[0];
+    return qa::binomial::price(opt,steps_);
 }
 
 // ===========================================================================

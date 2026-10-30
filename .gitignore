@@ -1,0 +1,10 @@
+# build output
+build/
+
+# macOS / Python junk
+.DS_Store
+__pycache__/
+*.pyc
+
+# personal notes, not for GitHub
+docs/
